@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 
+[ExecuteInEditMode]
 public class XRayCamera : MonoBehaviour {
 
 	public Transform target;
@@ -34,14 +35,12 @@ public class XRayCamera : MonoBehaviour {
 	private float dot5;
 	private float dot6;
 
-
-
+	private bool runInEditor = false;
 
 	private void UpdateShaderProperties(Material mat)
 	{
 
 		Vector3 exts = box.GetComponent<Collider> ().bounds.extents;
-
 
 		position1 = box.transform.position + Vector3.left*exts.x;
 		position2 = box.transform.position - Vector3.left*exts.x;
@@ -56,7 +55,6 @@ public class XRayCamera : MonoBehaviour {
 		normal4 = box.transform.TransformVector(Vector3.down);
 		normal5 = box.transform.TransformVector(Vector3.forward);
 		normal6 = box.transform.TransformVector(Vector3.back);
-
 
 		mat.SetVector("_Plane1Normal", normal1);
 		mat.SetVector("_Plane1Position", position1);
@@ -80,25 +78,58 @@ public class XRayCamera : MonoBehaviour {
 	}
 
 	void Start() {
+		if (!Application.isPlaying)
+			return;
+		
+		Down ();
+		Up ();
+	}
+
+	void OnDestroy(){
+		Down ();
+	}
+
+	private void Up(){
+		if (materialMap.Count > 0) {
+			print ("Is already up");
+			return;
+		}
+		materialMap.Clear ();
+
 		colliders = target.GetComponentsInChildren<Collider> ();
 		Renderer[] renderers = target.GetComponentsInChildren<Renderer> ();
 		foreach (Renderer r in renderers) {
-			Material[] mats = r.materials;
+			Material[] mats = r.sharedMaterials;
 			materialMap [r] = mats;
 			mats = new Material[mats.Length];
 			for (int i = 0; i < mats.Length; i++) {
-				mats [i] = new Material(r.materials[i]);
+				mats [i] = new Material(r.sharedMaterials[i]);
 				mats [i].shader = sliceMaterial.shader;
 				mats [i].SetColor ("_CrossColor", sliceMaterial.GetColor ("_CrossColor"));
 			}
-			r.materials = mats;
-				
+			r.sharedMaterials = mats;
+
+		}
+	}
+
+	private void Down(){
+		if (materialMap.Count <= 0)
+			return;
+		
+		colliders = target.GetComponentsInChildren<Collider> ();
+		Renderer[] renderers = target.GetComponentsInChildren<Renderer> ();
+		foreach (Renderer r in renderers) {
+			r.sharedMaterials = materialMap [r];
 		}
 
-//		box.GetComponent<MeshRenderer> ().enabled = false;
+		materialMap.Clear ();
 	}
 
 	void Update() {
+		
+		if (!Application.isPlaying &&!runInEditor)
+			return;
+		
 		planes = GeometryUtility.CalculateFrustumPlanes(camera);
 
 		foreach (Collider c in colliders) {
@@ -106,11 +137,22 @@ public class XRayCamera : MonoBehaviour {
 				Renderer r = c.gameObject.GetComponent<Renderer> ();
 				r.enabled = true;
 
-				foreach(Material m in r.materials){
+				foreach(Material m in r.sharedMaterials){
 					UpdateShaderProperties (m);
 				}
 			}else{
 				c.gameObject.GetComponent<Renderer> ().enabled = false;
+			}
+		}
+	}
+
+	public void SetRunInEditor(bool b){
+		if (b != runInEditor) {
+			runInEditor = b;
+			if (b) {
+				Up ();
+			}else{
+				Down ();
 			}
 		}
 	}
